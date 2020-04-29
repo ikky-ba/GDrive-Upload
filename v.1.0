@@ -1,0 +1,123 @@
+from __future__ import print_function
+import pickle
+import os.path
+from datetime import datetime
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import MediaFileUpload
+from google.auth.transport.requests import Request
+from apiclient import errors
+import json
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+import pathlib
+from os import chdir, listdir, stat,path
+from operator import itemgetter 
+
+
+filename = 'arquivos.txt'
+folders = 'D:\\Pasta BKP GDRIVE\\pastas.txt'
+root_folder = 'D:\\Pasta BKP GDRIVE\\NOT TO SEE'
+
+extensions='exe','py','mp4','mp3','srt','avi','txt','nfo','json'
+
+content = {}
+
+def lista_pastas(caminho):
+	for root, dirs, files in os.walk(caminho):
+		for folder in dirs:
+			content[os.path.join(root, folder)] = []
+			#print(content, '\n')
+		content[root] = files
+		print(content)
+	with open(folders, 'w') as f:
+		json.dump(content, f, indent = 2)
+
+
+SCOPES = ['https://www.googleapis.com/auth/drive']
+
+def sobe_pastas():
+    """Shows basic usage of the Drive v3 API.
+    Prints the names and ids of the first 10 files the user has access to.
+    """
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'client_id.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+
+    service = build('drive', 'v3', credentials=creds)
+
+    # """Lista todos os arquivos de acordo com o tipo e formato definido no campo mimeType"""
+    page_token = None
+
+    folder_id = '17lzyd0K-snCDA8725LmLDmo7-qfOmNyn'
+
+    with open(folders) as f:
+	    	files_and_folders = json.load(f)
+
+	    	pasta_anterior = {}
+	    	visitados = set()
+
+	    	for file1 in files_and_folders.keys():
+	    		statinfo = stat(file1)
+
+	    		if os.path.isdir(file1):
+	    			if file1 != root_folder:
+	    				head, tail = os.path.split(file1)
+	    				if head in pasta_anterior.keys():
+				    		file_name = os.path.basename(file1)
+				    		file_metadata = {'name': file_name,'mimeType': 'application/vnd.google-apps.folder', 'parents': [pasta_anterior.get(head)]}
+				    		file = service.files().create(body=file_metadata,supportsAllDrives='true',fields='id').execute()
+				    		id_pasta = file.get('id')
+				    		pasta_anterior[file1] = (id_pasta)
+				    	else:
+				    		file_name = os.path.basename(file1)
+				    		file_metadata = {'name': file_name,'mimeType': 'application/vnd.google-apps.folder', 'parents': [folder_id]}
+				    		file = service.files().create(body=file_metadata,supportsAllDrives='true',fields='id').execute()
+				    		id_pasta = file.get('id')
+				    		pasta_anterior[file1] = (id_pasta)
+
+	    	#print(pasta_anterior.items())
+	    	#print(pasta_anterior.values())
+	    	#print(pasta_anterior.keys())
+
+	    	lista_pasta = {}
+
+	    	for key,value in files_and_folders.items():
+	    		#print(key)
+	    		#print(value)
+	    		if key != root_folder:
+	    			#print(key)
+	    			#print(value)
+	    			#print('fim dos valores recebidos')
+	    			#print()
+		    		tamanho_chave = (len(key))
+		    		loop_value = 0
+		    		loops_value = len(value)
+		    		while loop_value < loops_value:
+					    	v = value[loop_value]
+					    	print('fazendo upload de: ', v)
+					    	file_name = os.path.basename(v)
+					    	file_metadata = {'name': file_name, 'parents': [pasta_anterior.get(key[0:tamanho_chave])],'kind': 'drive#file'}
+					    	file = service.files().create(body=file_metadata,supportsAllDrives='true',fields='id').execute()
+					    	loop_value += 1
+
+lista_pastas('D:\\Pasta BKP GDRIVE\\NOT TO SEE')
+
+sobe_pastas()
+
+print('FINALIZADO, VALIDE NO GDRIVE')
